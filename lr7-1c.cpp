@@ -1,128 +1,144 @@
+#include <SFML/Graphics.hpp>
 #include <iostream>
 #include <vector>
-#include <string>
 #include <iomanip>
-using namespace std;
+#include <cmath>
 
-// структура для хранения координат отрезков
-struct Segment {
-    double start; // начало отрезка (в диапазоне 0-1)
-    double end;   // конец отрезка (в диапазоне 0-1)
+using namespace std;
+using namespace sf;
+
+// структура для хранения отрезка (начало и конец)
+struct Seg {
+    double beg; // начало отрезка (0..1)
+    double end; // конец отрезка (0..1)
 };
 
-// функция для отрисовки одного уровня множества кантора
-void drawLevel(const vector<Segment>& segments, int level) {
-    const int width = 80; // ширина графического представления в терминале
+// рекурсивная функция построения множества Кантора
+void buildCant(vector<vector<Seg>>& lvls, double b, double e, int curlvl, int maxlvl) {
+    // условие выхода из рекурсии
+    if(curlvl > maxlvl) return;
     
-    // создаем строку из пробелов длиной width
-    string line(width, ' ');
+    // добавляем новый уровень при необходимости
+    if(lvls.size() <= curlvl) {
+        lvls.push_back({});
+    }
     
-    // для каждого отрезка в текущем уровне
-    for (const auto& seg : segments) {
-        // переводим координаты отрезка в диапазон 0-ширина
-        int start = static_cast<int>(seg.start * width);
-        int end = static_cast<int>(seg.end * width);
+    // добавляем текущий отрезок в соответствующий уровень
+    lvls[curlvl].push_back({b, e});
+    
+    // вычисляем длину текущего отрезка
+    double len = e - b;
+    
+    // рекурсивно строим левую и правую части
+    buildCant(lvls, b, b + len/3, curlvl + 1, maxlvl);
+    buildCant(lvls, e - len/3, e, curlvl + 1, maxlvl);
+}
+
+// функция для вывода текстового представления уровня
+void drawTxtLvl(const vector<Seg>& segs, int lvl) {
+    const int w = 80; // ширина текстового представления
+    string line(w, ' '); // создаем строку из пробелов
+
+    // заполняем строку символами '#' в местах отрезков
+    for(const auto& s : segs) {
+        // переводим координаты в диапазон 0..w
+        int beg = static_cast<int>(s.beg * w);
+        int end = static_cast<int>(s.end * w);
         
-        // рисуем отрезок, заполняя символами '#'
-        for (int i = start; i < end; ++i) {
+        // заполняем отрезки символами
+        for(int i = beg; i < end; ++i) {
             line[i] = '#';
         }
     }
-    
-    // выводим информацию о текущем уровне: номер, количество отрезков, их суммарную длину
-    cout << "n=" << level << " (отрезков: " << segments.size() 
+
+    // выводим информацию об уровне
+    cout << "n=" << lvl << " (отрезков: " << segs.size() 
          << ", длина: " << fixed << setprecision(6) 
-         << (segments.empty() ? 0.0 : (segments[0].end - segments[0].start) * segments.size()) << ")" << endl;
-    
-    // выводим графическую строку
-    cout << line << endl << endl;
+         << (segs.empty() ? 0.0 : (segs[0].end - segs[0].beg) * segs.size()) << ")\n"
+         << line << "\n";
 }
 
-// функция для вывода координат всех отрезков текущего уровня
-void printCoordinates(const vector<Segment>& segments, int level) {
-    cout << "координаты отрезков для n=" << level << ":" << endl;
+// функция для вывода координат отрезков
+void printCoords(const vector<Seg>& segs, int lvl) {
+    cout << "координаты отрезков для n=" << lvl << ":\n";
     
-    // для каждого отрезка выводим его номер и координаты
-    for (size_t i = 0; i < segments.size(); ++i) {
+    // выводим координаты каждого отрезка
+    for(size_t i = 0; i < segs.size(); ++i) {
         cout << "  " << i+1 << ": [" << fixed << setprecision(6) 
-             << segments[i].start << ", " << segments[i].end << "]" << endl;
+             << segs[i].beg << ", " << segs[i].end << "]\n";
     }
-    cout << endl;
+    cout << "\n";
 }
 
-// функция для отрисовки общего графика всех уровней
-void drawAllLevels(const vector<vector<Segment>>& allLevels) {
-    const int height = 6;    // количество уровней (0-5)
-    const int width = 80;    // ширина графика
+// функция для графического отображения множества Кантора
+void drawCant(RenderWindow& win, const vector<vector<Seg>>& lvls) {
+    // параметры отображения
+    const float x = 50.f;    // начальная позиция по x
+    const float y = 50.f;    // начальная позиция по y
+    const float w = 700.f;   // максимальная ширина
+    const float h = 10.f;    // высота линии
+    const float step = 50.f; // расстояние между уровнями
     
-    cout << "общий график множества кантора:" << endl;
-    cout << "--------------------------------" << endl;
+    // очищаем окно
+    win.clear(Color::Black);
     
-    // для каждого уровня сверху вниз
-    for (int level = 0; level < height; ++level) {
-        string line(width, ' '); // создаем пустую строку из пробелов
-        
-        // заполняем отрезки текущего уровня
-        for (const auto& seg : allLevels[level]) {
-            int start = static_cast<int>(seg.start * width);
-            int end = static_cast<int>(seg.end * width);
+    // рисуем все уровни
+    for(size_t lvl = 0; lvl < lvls.size(); ++lvl) {
+        // рисуем все отрезки текущего уровня
+        for(const auto& s : lvls[lvl]) {
+            // вычисляем позицию и длину отрезка
+            float beg = x + static_cast<float>(s.beg) * w;
+            float len = static_cast<float>(s.end - s.beg) * w;
             
-            // рисуем отрезок, заполняя символами '#'
-            for (int i = start; i < end; ++i) {
-                line[i] = '#';
-            }
+            // создаем и настраиваем прямоугольник
+            RectangleShape line(Vector2f(len, h));
+            line.setPosition(beg, y + lvl * step);
+            line.setFillColor(Color::White);
+            
+            // рисуем отрезок
+            win.draw(line);
         }
-        
-        // выводим уровень и его графическое представление
-        cout << "n=" << level << " |" << line << "|" << endl;
     }
-    cout << "--------------------------------" << endl;
+    
+    // отображаем все нарисованное
+    win.display();
 }
 
 int main() {
-    const int maxLevel = 5; // максимальный уровень (0-5)
-    vector<vector<Segment>> allLevels; // вектор для хранения всех уровней
+    const int maxlvl = 5; // максимальный уровень рекурсии
+    vector<vector<Seg>> lvls; // вектор для хранения всех уровней
     
-    // выводим сообщение о начале построения
-    cout << "построение множества кантора для уровней n=0 до n=5" << endl;
-    cout << "==================================================" << endl << endl;
+    // строим множество Кантора
+    buildCant(lvls, 0.0, 1.0, 0, maxlvl);
     
-    // создаем начальный уровень (n=0) - один отрезок [0,1]
-    vector<Segment> currentLevel = {{0.0, 1.0}};
-    // добавляем его в общий список уровней
-    allLevels.push_back(currentLevel);
+    // выводим текстовую информацию
+    cout << "построение множества кантора для уровней n=0 до n=" << maxlvl << "\n";
+    cout << "==================================================\n\n";
     
-    // выводим первый уровень
-    drawLevel(currentLevel, 0);
-    printCoordinates(currentLevel, 0);
+    // выводим каждый уровень
+    for(int lvl = 0; lvl <= maxlvl; ++lvl) {
+        drawTxtLvl(lvls[lvl], lvl);
+        printCoords(lvls[lvl], lvl);
+    }
+    cout << "построение завершено. всего уровней: " << maxlvl + 1 << "\n";
     
-    // строим уровни 1-5
-    for (int level = 1; level <= maxLevel; ++level) {
-        vector<Segment> nextLevel; // вектор для следующего уровня
+    // создаем графическое окно
+    RenderWindow win(VideoMode(800, 400), "множество кантора");
+    win.setFramerateLimit(60);
+    
+    // основной цикл программы
+    while(win.isOpen()) {
+        Event e;
         
-        // для каждого отрезка текущего уровня
-        for (const auto& seg : currentLevel) {
-            double length = seg.end - seg.start; // длина текущего отрезка
-            
-            // создаем два новых отрезка, исключая среднюю треть
-            nextLevel.push_back({seg.start, seg.start + length/3});
-            nextLevel.push_back({seg.end - length/3, seg.end});
+        // обработка событий
+        while(win.pollEvent(e)) {
+            if(e.type == Event::Closed)
+                win.close();
         }
         
-        // обновляем текущий уровень
-        currentLevel = nextLevel;
-        // добавляем его в список всех уровней
-        allLevels.push_back(currentLevel);
-        
-        // выводим текущий уровень
-        drawLevel(currentLevel, level);
-        printCoordinates(currentLevel, level);
+        // рисуем множество Кантора
+        drawCant(win, lvls);
     }
     
-    // выводим общий график всех уровней
-    drawAllLevels(allLevels);
-    
-    // сообщение о завершении построения
-    cout << "построение завершено. всего уровней: " << maxLevel + 1 << endl;
-    return 0; // завершение программы
+    return 0;
 }
